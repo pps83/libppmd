@@ -82,7 +82,7 @@ static int compress(FILE* in, FILE* out, char* fname)
     CPpmd8 ppmd = { .Stream.Out = (IByteOut *) &cw };
     Ppmd8_Construct(&ppmd);
     Ppmd8_Alloc(&ppmd, opt_mem << 20, &ialloc);
-    Ppmd8_RangeEnc_Init(&ppmd);
+    Ppmd8_Init_RangeEnc(&ppmd);
     Ppmd8_Init(&ppmd, opt_order, 0);
 
     unsigned char buf[BUFSIZ];
@@ -92,7 +92,7 @@ static int compress(FILE* in, FILE* out, char* fname)
             Ppmd8_EncodeSymbol(&ppmd, buf[i]);
     }
     Ppmd8_EncodeSymbol(&ppmd, -1); /* EndMark */
-    Ppmd8_RangeEnc_FlushData(&ppmd);
+    Ppmd8_Flush_RangeEnc(&ppmd);
     return fflush(out) != 0 || ferror(in);
 }
 
@@ -118,7 +118,7 @@ static int decompress(FILE* in, FILE* out)
     CPpmd8 ppmd = { .Stream.In = (IByteIn *) &cr };
     Ppmd8_Construct(&ppmd);
     Ppmd8_Alloc(&ppmd, opt_mem << 20, &ialloc);
-    Ppmd8_RangeDec_Init(&ppmd);
+    Ppmd8_Init_RangeDec(&ppmd);
     Ppmd8_Init(&ppmd, opt_order, opt_restore);
 
     unsigned char buf[BUFSIZ];

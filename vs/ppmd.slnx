@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="ppmd-mini.vcxproj" Id="e6500b27-4a1d-4602-a930-85c1a70ff1cb" />
+  <Project Path="ppmd.vcxproj" Id="a46e8c2b-d1ff-4569-bc64-549dea9798ed" />
+</Solution>

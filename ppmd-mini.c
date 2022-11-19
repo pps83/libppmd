@@ -2,9 +2,13 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include <unistd.h> /* isatty */
 #include <getopt.h>
 #include "Ppmd8.h"
+
+#ifdef _WIN32
+#define putc_unlocked putc
+#define getc_unlocked getc
+#endif
 
 static void *pmalloc(ISzAllocPtr ip, size_t size)
 {
@@ -66,13 +70,13 @@ struct header {
     0, 1, 0, 0,
 };
 
-static int compress(void)
+static int compress(FILE* in, FILE* out)
 {
     hdr.info = (opt_order - 1) | ((opt_mem - 1) << 4) | (('I' - 'A') << 12);
-    fwrite(&hdr, sizeof hdr, 1, stdout);
-    putchar('a');
+    fwrite(&hdr, sizeof hdr, 1, out);
+    putc('a', out);
 
-    struct CharWriter cw = { Write, stdout };
+    struct CharWriter cw = { Write, out };
     CPpmd8 ppmd = { .Stream.Out = (IByteOut *) &cw };
     Ppmd8_Construct(&ppmd);
     Ppmd8_Alloc(&ppmd, opt_mem << 20, &ialloc);
@@ -81,18 +85,18 @@ static int compress(void)
 
     unsigned char buf[BUFSIZ];
     size_t n;
-    while ((n = fread(buf, 1, sizeof buf, stdin))) {
+    while ((n = fread(buf, 1, sizeof buf, in))) {
         for (size_t i = 0; i < n; i++)
             Ppmd8_EncodeSymbol(&ppmd, buf[i]);
     }
     Ppmd8_EncodeSymbol(&ppmd, -1); /* EndMark */
     Ppmd8_RangeEnc_FlushData(&ppmd);
-    return fflush(stdout) != 0 || ferror(stdin);
+    return fflush(out) != 0 || ferror(in);
 }
 
-static int decompress(void)
+static int decompress(FILE* in, FILE* out)
 {
-    if (fread(&hdr, sizeof hdr, 1, stdin) != 1)
+    if (fread(&hdr, sizeof hdr, 1, in) != 1)
         return 1;
     if (hdr.magic != MAGIC)
         return 1;
@@ -101,14 +105,14 @@ static int decompress(void)
 
     char fname[0x1FF];
     size_t fnlen = hdr.fnlen & 0x1FF;
-    if (fread(fname, fnlen, 1, stdin) != 1)
+    if (fread(fname, fnlen, 1, in) != 1)
         return 1;
 
     opt_restore = hdr.fnlen >> 14;
     opt_order = (hdr.info & 0xf) + 1;
     opt_mem = ((hdr.info >> 4) & 0xff) + 1;
 
-    struct CharReader cr = { Read, stdin, 0 };
+    struct CharReader cr = { Read, in, 0 };
     CPpmd8 ppmd = { .Stream.In = (IByteIn *) &cr };
     Ppmd8_Construct(&ppmd);
     Ppmd8_Alloc(&ppmd, opt_mem << 20, &ialloc);
@@ -124,15 +128,15 @@ static int decompress(void)
             break;
         buf[n++] = c;
         if (n == sizeof buf) {
-            fwrite(buf, 1, sizeof buf, stdout);
+            fwrite(buf, 1, sizeof buf, out);
             n = 0;
         }
     }
     if (n)
-        fwrite(buf, 1, n, stdout);
-    return fflush(stdout) != 0 || c != -1 ||
+        fwrite(buf, 1, n, out);
+    return fflush(out) != 0 || c != -1 ||
            !Ppmd8_RangeDec_IsFinishedOK(&ppmd) ||
-           ferror(stdin) || getchar_unlocked() != EOF;
+           ferror(in) || getc_unlocked(in) != EOF;
 }
 
 int main(int argc, char **argv)
@@ -141,8 +145,6 @@ int main(int argc, char **argv)
         { "decompress", 0, NULL, 'd' },
         { "uncompress", 0, NULL, 'd' },
         { "keep",       0, NULL, 'k' },
-        { "stdout",     0, NULL, 'c' },
-        { "to-stdout",  0, NULL, 'c' },
         { "memory",     1, NULL, 'm' },
         { "order",      1, NULL, 'o' },
         { "help",       0, NULL, 'h' },
@@ -150,18 +152,16 @@ int main(int argc, char **argv)
     };
     bool opt_d = 0;
     bool opt_k = 0;
-    bool opt_c = 0;
     int c;
-    while ((c = getopt_long(argc, argv, "dkcm:o:36h", longopts, NULL)) != -1) {
+    FILE* in = NULL;
+    FILE* out = NULL;
+    while ((c = getopt_long(argc, argv, "dkm:o:36h", longopts, NULL)) != -1) {
         switch (c) {
         case 'd':
             opt_d = 1;
             break;
         case 'k':
             opt_k = 1;
-            break;
-        case 'c':
-            opt_c = 1;
             break;
         case 'm':
             opt_mem = atoi(optarg);
@@ -183,59 +183,50 @@ int main(int argc, char **argv)
     }
     argc -= optind;
     argv += optind;
-    if (argc > 1) {
-        fputs("ppmid-mini: too many arguments\n", stderr);
-usage:  fputs("Usage: ppmid-mini [-d] [-k] [-c] [FILE]\n", stderr);
+    if (argc != 1) {
+        fputs("ppmid-mini: invalid arguments\n", stderr);
+usage:  fputs("Usage: ppmid-mini [-d] [-k] FILE\n", stderr);
         return 1;
     }
-    char *fname = argc ? argv[0] : NULL;
-    if (fname && strcmp(fname, "-") == 0)
-        fname = NULL;
-    if (fname == NULL)
-        opt_c = 1;
-    if (fname == NULL && opt_d && isatty(0)) {
-        fprintf(stderr, "ppmid-mini: compressed data cannot be read from a terminal\n");
-        return 1;
-    }
-    if (opt_c && !opt_d && isatty(1)) {
-        fprintf(stderr, "ppmid-mini: compressed data cannot be written to a terminal\n");
-        return 1;
-    }
+    char *fname = argv[0];
     if (fname) {
-        stdin = freopen(fname, "r", stdin);
-        if (!stdin) {
+        in = fopen(fname, "rb");
+        if (!in) {
             fprintf(stderr, "ppmid-mini: cannot open %s\n", fname);
             return 1;
         }
     }
-    if (opt_d && !opt_c) {
+    if (opt_d) {
         char *dot = strrchr(fname, '.');
         if (dot == NULL || dot[1] != 'p' || strchr(dot, '/')) {
             fprintf(stderr, "ppmid-mini: unknown suffix: %s\n", fname);
             return 1;
         }
         *dot = '\0';
-        stdout = freopen(fname, "w", stdout);
-        if (!stdout) {
+        out = fopen(fname, "wb");
+        if (!out) {
             fprintf(stderr, "ppmid-mini: cannot open %s\n", fname);
             return 1;
         }
         *dot = '.';
     }
-    if (!opt_d && !opt_c) {
+    if (!opt_d) {
         size_t len = strlen(fname);
-        char outname[len + 6];
+        char* outname = malloc(len + 6);
         memcpy(outname, fname, len);
         memcpy(outname + len, ".ppmd", 6);
-        stdout = freopen(outname, "w", stdout);
-        if (!stdout) {
+        out = fopen(outname, "wb");
+        if (!out) {
             fprintf(stderr, "ppmid-mini: cannot open %s\n", outname);
+            free(outname);
             return 1;
         }
+        free(outname);
     }
-    int rc = opt_d ? decompress() : compress();
-    if (rc == 0 && !opt_k && !opt_c) {
-        fclose(stdin);
+    int rc = opt_d ? decompress(in, out) : compress(in, out);
+    fclose(in);
+    fclose(out);
+    if (rc == 0 && !opt_k) {
         remove(fname);
     }
     return rc;

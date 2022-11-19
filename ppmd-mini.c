@@ -56,8 +56,8 @@ static Byte Read(void *p)
     return c;
 }
 
-static int opt_mem = 8;
-static int opt_order = 6;
+static int opt_mem = 16;
+static int opt_order = 4;
 static int opt_restore = 0;
 
 struct header {
@@ -70,11 +70,13 @@ struct header {
     0, 1, 0, 0,
 };
 
-static int compress(FILE* in, FILE* out)
+static int compress(FILE* in, FILE* out, char* fname)
 {
+    int fnameLen = strlen(fname) & 0x3FFF;
     hdr.info = (opt_order - 1) | ((opt_mem - 1) << 4) | (('I' - 'A') << 12);
+    hdr.fnlen = fnameLen;
     fwrite(&hdr, sizeof hdr, 1, out);
-    putc('a', out);
+    fwrite(fname, 1, fnameLen, out);
 
     struct CharWriter cw = { Write, out };
     CPpmd8 ppmd = { .Stream.Out = (IByteOut *) &cw };
@@ -189,7 +191,14 @@ usage:  fputs("Usage: ppmid-mini [-d] [-k] FILE\n", stderr);
         return 1;
     }
     char *fname = argv[0];
+    char *fname2 = fname;
     if (fname) {
+        char* spos = strrchr(fname2, '/');
+        if (spos)
+            fname2 = spos + 1;
+        spos = strrchr(fname2, '\\');
+        if (spos)
+            fname2 = spos + 1;
         in = fopen(fname, "rb");
         if (!in) {
             fprintf(stderr, "ppmid-mini: cannot open %s\n", fname);
@@ -223,7 +232,7 @@ usage:  fputs("Usage: ppmid-mini [-d] [-k] FILE\n", stderr);
         }
         free(outname);
     }
-    int rc = opt_d ? decompress(in, out) : compress(in, out);
+    int rc = opt_d ? decompress(in, out) : compress(in, out, fname2);
     fclose(in);
     fclose(out);
     if (rc == 0 && !opt_k) {

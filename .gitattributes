@@ -1,0 +1,15 @@
+# By default, enforce LF line-endings on all text files
+* text=auto eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.bat text eol=crlf
+
+# Visual Studio
+*.sln eol=crlf
+*.slnx eol=crlf
+*.vcxproj eol=crlf
+*.vcxproj.filters eol=crlf
+*.props eol=crlf
+*.natvis eol=crlf

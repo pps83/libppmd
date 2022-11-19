@@ -1,0 +1,6 @@
+# By default, enforce LF line-endings on all text files
+* text=auto eol=lf
+
+*.sln eol=crlf
+*.vcxproj eol=crlf
+*.vcxproj.filters eol=crlf

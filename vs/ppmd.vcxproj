@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\ppmd.h" />
     <ClInclude Include="..\lib\7zTypes.h" />
     <ClInclude Include="..\lib\Compiler.h" />
     <ClInclude Include="..\lib\CpuArch.h" />
@@ -27,6 +28,7 @@
     <ClInclude Include="..\lib\Precomp.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\lib\ppmd.c" />
     <ClCompile Include="..\lib\Ppmd8.c" />
     <ClCompile Include="..\lib\Ppmd8Dec.c" />
     <ClCompile Include="..\lib\Ppmd8Enc.c" />

@@ -60,6 +60,15 @@ size_t ppmd_compress(void* dst, size_t dstCapacity,
     if (compressionLevel == 0)
         compressionLevel = 1;
     memMb = 1 << (compressionLevel - 1);
+    /* Capped at 16 times the input, as 7-Zip's PpmdZip.cpp does: a small input needs no 256 MB model */
+    for (unsigned m = 1; m < memMb; m <<= 1)
+    {
+        if (srcSize <= ((size_t)m << 20) / 16)
+        {
+            memMb = m;
+            break;
+        }
+    }
     modelOrder = 3 + compressionLevel;
     restoreMethod = compressionLevel < 7 ?
         PPMD8_RESTORE_METHOD_RESTART : PPMD8_RESTORE_METHOD_CUT_OFF;

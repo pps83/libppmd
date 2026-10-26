@@ -1,4 +1,4 @@
-# ppmd-mini - standalone PPMd compressor
+# ppmdi - standalone PPMd compressor
 
 ```
 PPMDI 1.0
